@@ -1,0 +1,321 @@
+:root {
+  --fondo: #f6f7f9;
+  --superficie: #ffffff;
+  --texto: #1c2430;
+  --suave: #5b6675;
+  --borde: #dde2e8;
+  --acento: #1f6f4a;
+  --acento-texto: #ffffff;
+  --usuario: #e7f2ec;
+  --bien: #1f7a4d;
+  --mal: #b3261e;
+  --aviso: #fff4d6;
+  --aviso-borde: #d99a00;
+  --error: #fdecea;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #12161c;
+    --superficie: #1b2129;
+    --texto: #e6eaf0;
+    --suave: #9aa5b4;
+    --borde: #2c343f;
+    --acento: #3fa373;
+    --acento-texto: #0d1a13;
+    --usuario: #1d3328;
+    --bien: #5cc98f;
+    --mal: #ff8a80;
+    --aviso: #3a3017;
+    --aviso-borde: #e0b43a;
+    --error: #3b1f1d;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.subtitulo {
+  margin: 2px 0 0;
+  color: var(--suave);
+  font-size: 13px;
+}
+
+.conversacion {
+  flex: 1;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bienvenida {
+  padding: 16px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+}
+
+.bienvenida p {
+  margin-top: 0;
+}
+
+.sugerencia {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  text-align: left;
+  background: var(--fondo);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+}
+
+.mensaje {
+  max-width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  overflow-wrap: anywhere;
+}
+
+.mensaje p {
+  margin: 0 0 8px;
+}
+
+.mensaje p:last-child {
+  margin-bottom: 0;
+}
+
+.mensaje.usuario {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--usuario);
+}
+
+.mensaje.agente.confirmacion {
+  border: 2px solid var(--aviso-borde);
+  background: var(--aviso);
+}
+
+.mensaje.agente.error {
+  background: var(--error);
+  border-color: var(--mal);
+}
+
+.etiqueta {
+  font-weight: 700;
+  color: var(--aviso-borde);
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.texto h3 {
+  margin: 12px 0 6px;
+  font-size: 15px;
+}
+
+.texto ul,
+.texto ol {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+}
+
+.texto code,
+.llamada code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+}
+
+.tabla {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+
+th,
+td {
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  text-align: left;
+  vertical-align: top;
+}
+
+.llamadas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.llamada {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+  font-size: 13px;
+}
+
+.llamada summary {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.llamada .resumen {
+  color: var(--suave);
+}
+
+.llamada.bien .icono {
+  color: var(--bien);
+}
+
+.llamada.mal .icono {
+  color: var(--mal);
+}
+
+.llamada pre {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  border-top: 1px solid var(--borde);
+  font-size: 12px;
+}
+
+.acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pensando {
+  color: var(--suave);
+  font-size: 14px;
+}
+
+.pensando span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--suave);
+  animation: latido 1.2s infinite ease-in-out;
+}
+
+.pensando span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.pensando span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes latido {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.compositor,
+.acceso {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 12px 16px 16px;
+  background: var(--fondo);
+}
+
+.compositor {
+  display: flex;
+  gap: 8px;
+}
+
+.acceso .fila {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+textarea,
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  resize: vertical;
+}
+
+button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--acento);
+  color: var(--acento-texto);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.secundario {
+  background: transparent;
+  color: var(--texto);
+  border: 1px solid var(--borde);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

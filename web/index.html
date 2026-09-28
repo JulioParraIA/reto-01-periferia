@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Registro como proveedor</title>
+    <link rel="stylesheet" href="/estilos.css" />
+  </head>
+  <body>
+    <header class="barra">
+      <div>
+        <h1>Registro como proveedor</h1>
+        <p class="subtitulo">Agente de Periferia IT Group · <span id="modelo">conectando…</span></p>
+      </div>
+      <button id="nueva" class="secundario" type="button">Nueva sesión</button>
+    </header>
+
+    <main id="conversacion" class="conversacion" aria-live="polite">
+      <section id="bienvenida" class="bienvenida">
+        <p>Pídeme que procese una solicitud de registro: leo el correo del cliente, lleno el formulario con el repositorio maestro y armo el paquete para la firma del representante legal. Nunca envío nada sin tu confirmación.</p>
+        <button class="sugerencia" type="button" data-texto='Procesa el caso "ec-corp-andina". Dime qué campos quedaron llenos, cuáles faltan, si el paquete está listo para firma y qué soportes debo actualizar. No envíes nada todavía.'>
+          Procesa el caso «ec-corp-andina» sin enviar nada
+        </button>
+        <button class="sugerencia" type="button" data-texto='Procesa el caso "co-industrias-delta" y dime si queda listo para firma.'>
+          Procesa el caso «co-industrias-delta»
+        </button>
+      </section>
+    </main>
+
+    <form id="acceso" class="acceso" hidden>
+      <label for="clave">Este enlace está protegido. Escribe la clave de acceso:</label>
+      <div class="fila">
+        <input id="clave" type="password" autocomplete="current-password" required />
+        <button type="submit">Entrar</button>
+      </div>
+    </form>
+
+    <form id="formulario" class="compositor">
+      <textarea id="mensaje" rows="2" placeholder="Escribe tu mensaje… (Enter envía, Shift+Enter hace un salto de línea)" required></textarea>
+      <button id="enviar" type="submit">Enviar</button>
+    </form>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

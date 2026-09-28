@@ -1,0 +1,149 @@
+/**
+ * Ciclo del agente (sección 6.3 del PRD): mensaje → modelo → herramientas → … → respuesta.
+ *   CA1 tope de iteraciones por turno.
+ *   CA3 confirmación humana: la decide el backend con lo que escribió el usuario, no el modelo.
+ *   CA4 cada llamada queda en el chat y en out/log.jsonl.
+ *   CA5 un error se explica en el chat y la sesión sigue viva.
+ */
+import { ErrorLLM, type AdaptadorLLM, type LlamadaHerramienta, type OpcionesEnvio, type RespuestaModelo } from "../llm/adapter.ts"
+import { esAfirmativo } from "./confirmacion.ts"
+import { ejecutarHerramienta, type Herramienta, type ResultadoHerramienta } from "./herramientas.ts"
+import type { LlamadaVisible, Pendiente, ResultadoTurno, Sesion } from "./tipos.ts"
+
+export type DependenciasCiclo = {
+  llm: AdaptadorLLM
+  herramientas: Herramienta[]
+  directorio: string
+  maxIteraciones: number
+  maxTokensSesion: number
+}
+
+/** Error que devuelve una herramienta cuando la acción necesita confirmación (contrato de proveedor_simular_envio). */
+const ERROR_CONFIRMACION = "requiere confirmación explícita"
+const SIN_TEXTO = "El modelo no devolvió texto; intenta de nuevo."
+
+type EstadoTurno = {
+  llamadas: LlamadaVisible[]
+  /** Confirmación que dio el usuario en este mensaje; se gasta en la primera acción que la usa. */
+  otorgada: Pendiente | null
+  /** Acción que queda esperando confirmación al terminar el turno. */
+  pendiente: Pendiente | null
+}
+
+function esObjeto(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor)
+}
+
+function casoDe(argumentos: unknown): string | null {
+  return esObjeto(argumentos) && typeof argumentos.caso === "string" ? argumentos.caso : null
+}
+
+/** Si el modelo escribió un JSON inválido, se pasa el texto tal cual y la validación con zod lo rechaza. */
+function leerArgumentos(texto: string): unknown {
+  try {
+    return JSON.parse(texto)
+  } catch {
+    return texto
+  }
+}
+
+/** `confirmado` solo es true si el usuario confirmó esta acción (y este caso) en su último mensaje. */
+function fijarConfirmacion(argumentos: unknown, otorgada: Pendiente | null): unknown {
+  if (!esObjeto(argumentos)) return argumentos
+  const confirmado = otorgada !== null && (otorgada.caso === null || otorgada.caso === casoDe(argumentos))
+  return { ...argumentos, confirmado }
+}
+
+function anunciaConfirmacion(datos: unknown): boolean {
+  return esObjeto(datos) && esObjeto(datos.confirmacion_pendiente)
+}
+
+function actualizarConfirmacion(turno: EstadoTurno, herramienta: Herramienta | undefined, argumentos: unknown, resultado: ResultadoHerramienta): void {
+  if (herramienta?.controlaConfirmacion && resultado.ok) {
+    turno.otorgada = null
+    turno.pendiente = null
+    return
+  }
+  if (resultado.error === ERROR_CONFIRMACION || anunciaConfirmacion(resultado.datos)) turno.pendiente = { caso: casoDe(argumentos) }
+}
+
+async function pedirAlModelo(sesion: Sesion, deps: DependenciasCiclo, opciones?: OpcionesEnvio): Promise<RespuestaModelo> {
+  const respuesta = await deps.llm.enviar(sesion.mensajes, deps.herramientas, opciones)
+  sesion.tokens += respuesta.uso.entrada + respuesta.uso.salida
+  sesion.costo += respuesta.uso.costo ?? 0
+  const texto = respuesta.texto || (respuesta.llamadas.length > 0 ? "" : SIN_TEXTO)
+  sesion.mensajes.push({ rol: "assistant", contenido: texto, llamadas: respuesta.llamadas, datosProveedor: respuesta.datosProveedor })
+  return { ...respuesta, texto }
+}
+
+async function atenderLlamada(sesion: Sesion, turno: EstadoTurno, llamada: LlamadaHerramienta, deps: DependenciasCiclo): Promise<void> {
+  const herramienta = deps.herramientas.find((candidata) => candidata.nombre === llamada.nombre)
+  const leidos = leerArgumentos(llamada.argumentos)
+  const argumentos = herramienta?.controlaConfirmacion ? fijarConfirmacion(leidos, turno.otorgada) : leidos
+  const ctx = { directory: deps.directorio, sessionId: sesion.id }
+  const resultado = await ejecutarHerramienta(deps.herramientas, llamada.nombre, argumentos, ctx)
+  actualizarConfirmacion(turno, herramienta, argumentos, resultado)
+  sesion.mensajes.push({ rol: "tool", idLlamada: llamada.id, contenido: resultado.texto })
+  turno.llamadas.push({ herramienta: llamada.nombre, argumentos, ok: resultado.ok, resumen: resultado.resumen })
+}
+
+function responderSinModelo(sesion: Sesion, texto: string): string {
+  sesion.mensajes.push({ rol: "assistant", contenido: texto, llamadas: [] })
+  return texto
+}
+
+/** CA1: al llegar al tope, el modelo responde con lo que tiene y lo que falta, sin más herramientas. */
+async function cerrarPorTope(sesion: Sesion, deps: DependenciasCiclo): Promise<string> {
+  sesion.mensajes.push({
+    rol: "user",
+    contenido: `[Aviso del sistema] Se alcanzó el tope de ${deps.maxIteraciones} pasos de este turno. Sin llamar más herramientas, responde con lo que ya tienes y lo que falta por hacer.`,
+  })
+  const respuesta = await pedirAlModelo(sesion, deps, { sinHerramientas: true })
+  for (const llamada of respuesta.llamadas) {
+    const contenido = JSON.stringify({ ok: false, error: "No se ejecutó: se alcanzó el tope de pasos del turno." })
+    sesion.mensajes.push({ rol: "tool", idLlamada: llamada.id, contenido })
+  }
+  if (respuesta.llamadas.length === 0 && respuesta.texto !== SIN_TEXTO) return respuesta.texto
+  return `Llegué al tope de ${deps.maxIteraciones} pasos en este turno sin terminar; pídeme que continúe.`
+}
+
+async function iterar(sesion: Sesion, turno: EstadoTurno, deps: DependenciasCiclo): Promise<string> {
+  for (let vuelta = 0; vuelta < deps.maxIteraciones; vuelta++) {
+    if (sesion.tokens >= deps.maxTokensSesion) {
+      return responderSinModelo(sesion, "Esta sesión llegó a su tope de tokens; abre una sesión nueva para seguir.")
+    }
+    const respuesta = await pedirAlModelo(sesion, deps)
+    if (respuesta.llamadas.length === 0) return respuesta.texto
+    for (const llamada of respuesta.llamadas) await atenderLlamada(sesion, turno, llamada, deps)
+  }
+  return cerrarPorTope(sesion, deps)
+}
+
+function cerrar(sesion: Sesion, turno: EstadoTurno, texto: string, error: boolean): ResultadoTurno {
+  sesion.pendiente = turno.pendiente
+  const needsConfirmation = turno.pendiente !== null
+  const marca = error ? { error: true } : {}
+  sesion.historial.push({ rol: "agente", texto, ts: new Date().toISOString(), toolCalls: turno.llamadas, needsConfirmation, ...marca })
+  return { reply: texto, toolCalls: turno.llamadas, needsConfirmation, ...marca }
+}
+
+export async function procesarTurno(sesion: Sesion, mensaje: string, confirmar: boolean, deps: DependenciasCiclo): Promise<ResultadoTurno> {
+  const turno: EstadoTurno = {
+    llamadas: [],
+    otorgada: sesion.pendiente && (confirmar || esAfirmativo(mensaje)) ? sesion.pendiente : null,
+    pendiente: null,
+  }
+  sesion.pendiente = null
+  sesion.mensajes.push({ rol: "user", contenido: mensaje })
+  sesion.historial.push({ rol: "usuario", texto: mensaje, ts: new Date().toISOString() })
+  try {
+    return cerrar(sesion, turno, await iterar(sesion, turno, deps), false)
+  } catch (error) {
+    if (!(error instanceof ErrorLLM)) console.error("Error inesperado en el ciclo del agente:", error)
+    const texto =
+      error instanceof ErrorLLM
+        ? `No pude completar la respuesta: ${error.message}`
+        : "No pude completar la respuesta por un error inesperado del servidor; intenta de nuevo."
+    return cerrar(sesion, turno, responderSinModelo(sesion, texto), true)
+  }
+}
