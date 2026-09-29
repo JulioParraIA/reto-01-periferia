@@ -7,8 +7,9 @@ const conversacion = document.querySelector("#conversacion")
 function agregar(elemento) {
   conversacion.querySelector(".bienvenida")?.classList.add("compacta")
   conversacion.append(elemento)
+  // Desplazamiento inmediato: el suave se interrumpe cuando cambia la altura (por ejemplo, al quitar «trabajando…»).
   const largo = elemento.offsetHeight > conversacion.clientHeight * 0.7
-  elemento.scrollIntoView({ behavior: "smooth", block: largo ? "start" : "end" })
+  elemento.scrollIntoView({ block: largo ? "start" : "end" })
   return elemento
 }
 
