@@ -100,7 +100,7 @@ function markdown(texto) {
 function agregar(elemento) {
   $("#bienvenida")?.remove()
   conversacion.append(elemento)
-  elemento.scrollIntoView({ behavior: "smooth", block: "end" })
+  elemento.scrollIntoView({ behavior: "smooth", block: elemento.offsetHeight > window.innerHeight * 0.6 ? "start" : "end" })
   return elemento
 }
 

@@ -104,6 +104,12 @@ h1 {
   border: 1px solid var(--borde);
 }
 
+.mensaje,
+.pensando {
+  /* Que el último mensaje no quede debajo de la caja de texto fija al desplazarse. */
+  scroll-margin-bottom: 110px;
+}
+
 .mensaje {
   max-width: 100%;
   padding: 12px 14px;

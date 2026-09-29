@@ -59,7 +59,16 @@ Si el modelo intenta enviar sin confirmación, aunque mande `confirmado: true`, 
 
 Se eligió Claude Sonnet 5.5 porque el trabajo del modelo aquí es seguir reglas y encadenar herramientas, no calcular: los valores, los estados y las vigencias los resuelven las herramientas. Cuesta la mitad que Claude Opus 5.5 en OpenRouter (USD 4 y 20). OpenRouter permite cambiar de modelo con la variable `LLM_MODELO`, sin tocar código. Cada petición activa la caché automática de OpenRouter, así que cada vuelta del turno vuelve a leer lo ya enviado al 10 % del precio.
 
-**Costo por caso:** pendiente de medir con la clave de OpenRouter, con el consumo real que reporta la API en cada respuesta.
+**Costo por caso, medido.** Se midió el 2026-09-28 en el link de Render. Cada caso se procesó en una sesión nueva con el mensaje de ejemplo del PRD, y el costo es el que informa OpenRouter en cada respuesta:
+
+| Caso | Tiempo | Tokens | De ellos, de la caché | Costo |
+|---|---|---|---|---|
+| co-industrias-delta | 12 s | 25.789 | 16.016 | USD 0,040 |
+| ec-corp-andina | 13 s | 32.460 | 23.028 | USD 0,039 |
+| hn-agroexport-sula | 11 s | 23.893 | 15.199 | USD 0,035 |
+| pa-logistica-istmo | 13 s | 30.023 | 21.658 | USD 0,036 |
+
+Procesar un caso cuesta unos USD 0,04 y tarda unos 12 segundos, con cuatro herramientas y el resumen final. La conversación completa del ejemplo del PRD (procesar `ec-corp-andina` y después «envía») costó USD 0,031 con 50.434 tokens, de los cuales 47.519 salieron de la caché. Con 8 a 12 solicitudes al mes, el modelo cuesta menos de un dólar al mes.
 
 ## 5. Diseño del formato «portal web» (solo documentación)
 
@@ -110,7 +119,7 @@ Se eligió Claude Sonnet 5.5 porque el trabajo del modelo aquí es seguir reglas
 | HU-5 Manejo de errores | Hecho | Herramientas que nunca lanzan, mensajes claros y un caso malo no detiene los demás |
 | Bonus: módulo reutilizable | Hecho | `modulo/` generado desde las mismas fuentes y verificado por una prueba y por la integración continua |
 
-**Qué falta para producción:** leer las solicitudes del buzón real en vez de fixtures; conectar el repositorio maestro y los soportes a su fuente real, con un dueño del dato; llenar la plantilla original del cliente (el .xlsx que manda) y los PDF con AcroForm; guardar sesiones y registros en una base de datos con auditoría; autenticar a cada usuario; administrar el glosario desde una pantalla; avisar antes de que venzan los soportes; y medir el costo real por caso en producción.
+**Qué falta para producción:** leer las solicitudes del buzón real en vez de fixtures; conectar el repositorio maestro y los soportes a su fuente real, con un dueño del dato; llenar la plantilla original del cliente (el .xlsx que manda) y los PDF con AcroForm; guardar sesiones y registros en una base de datos con auditoría; autenticar a cada usuario; administrar el glosario desde una pantalla; avisar antes de que venzan los soportes; y seguir el costo por caso con el volumen real.
 
 ## 9. Uso de IA
 
