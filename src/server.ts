@@ -73,7 +73,8 @@ function historial(peticion: Request, id: string): Response {
   if (!autorizado(peticion)) return json({ error: "Clave de acceso inválida." }, 401)
   const sesion = sesiones.obtener(id)
   if (!sesion) return json({ error: "No existe esa sesión." }, 404)
-  return json({ sessionId: sesion.id, creada: sesion.creada, historial: sesion.historial, tokens: sesion.tokens, costo: sesion.costo })
+  const { creada, historial: entradas, tokens, tokensEnCache, costo } = sesion
+  return json({ sessionId: sesion.id, creada, historial: entradas, tokens, tokensEnCache, costo })
 }
 
 function salud(): Response {

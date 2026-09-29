@@ -31,6 +31,8 @@ export type Sesion = {
   /** Lo que ve la persona en el chat. */
   historial: EntradaHistorial[]
   tokens: number
+  /** De los tokens de entrada, cuántos salieron de la caché del proveedor. */
+  tokensEnCache: number
   costo: number
   pendiente: Pendiente | null
   ocupada: boolean

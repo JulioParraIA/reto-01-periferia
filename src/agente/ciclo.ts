@@ -70,6 +70,7 @@ function actualizarConfirmacion(turno: EstadoTurno, herramienta: Herramienta | u
 async function pedirAlModelo(sesion: Sesion, deps: DependenciasCiclo, opciones?: OpcionesEnvio): Promise<RespuestaModelo> {
   const respuesta = await deps.llm.enviar(sesion.mensajes, deps.herramientas, opciones)
   sesion.tokens += respuesta.uso.entrada + respuesta.uso.salida
+  sesion.tokensEnCache += respuesta.uso.entradaEnCache
   sesion.costo += respuesta.uso.costo ?? 0
   const texto = respuesta.texto || (respuesta.llamadas.length > 0 ? "" : SIN_TEXTO)
   sesion.mensajes.push({ rol: "assistant", contenido: texto, llamadas: respuesta.llamadas, datosProveedor: respuesta.datosProveedor })

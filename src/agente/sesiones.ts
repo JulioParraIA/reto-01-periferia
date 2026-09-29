@@ -19,6 +19,7 @@ export class Sesiones {
       mensajes: [{ rol: "system", contenido: promptSistema }],
       historial: [],
       tokens: 0,
+      tokensEnCache: 0,
       costo: 0,
       pendiente: null,
       ocupada: false,
