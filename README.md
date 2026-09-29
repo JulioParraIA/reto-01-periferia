@@ -2,8 +2,8 @@
 
 Agente conversacional que prepara el registro de Periferia IT Group como proveedor ante un cliente: lee la solicitud, llena el formulario (Excel o PDF) con el repositorio maestro, arma el paquete para la firma del representante legal y solo simula el envío tras una confirmación explícita.
 
-- **Link de prueba:** pendiente de despliegue en Render.
-- **Clave de acceso al link:** se entrega junto con el link.
+- **Link de prueba:** https://reto-01-periferia.onrender.com
+- **Clave de acceso al link:** `periferia-4127hcghm1` (el chat la pide al entrar).
 - **Planteamiento de la solución:** [SOLUCION.md](SOLUCION.md).
 
 ## Levantar en local
