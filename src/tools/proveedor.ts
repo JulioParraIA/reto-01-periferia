@@ -89,7 +89,10 @@ const EstadoCamposSchema = z.object({
     }),
   ),
 })
-/** Lo que deja proveedor_armar_paquete para proveedor_simular_envio. */
+/**
+ * Lo que deja proveedor_armar_paquete para proveedor_simular_envio. La firma la agrega la
+ * persona desde la interfaz (no hay herramienta para firmar: el agente nunca firma).
+ */
 const EstadoPaqueteSchema = z.object({
   listo_para_firma: z.boolean(),
   fecha_referencia: z.string(),
@@ -97,6 +100,16 @@ const EstadoPaqueteSchema = z.object({
   para: z.string(),
   asunto: z.string(),
   adjuntos: z.array(z.string()),
+  firma: z
+    .object({
+      firmante: z.string(),
+      cargo: z.string(),
+      metodo: z.enum(["dibujada", "clic"]),
+      fecha: z.string(),
+      codigo: z.string(),
+      archivo: z.string(),
+    })
+    .nullish(),
 })
 
 type Solicitud = z.infer<typeof SolicitudSchema>
@@ -824,13 +837,27 @@ async function simularEnvio(ctx: Contexto, caso: string, confirmado: boolean) {
     `- Asunto: ${paquete.asunto}`,
     `- Adjuntos: ${paquete.adjuntos.join(", ") || "ninguno"}`,
     `- Estado del paquete: ${paquete.listo_para_firma ? "listo para firma" : `NO listo para firma (${paquete.bloqueos.join("; ")})`}`,
+    `- Firma del representante legal: ${describirFirma(paquete)}`,
     "",
     "No se envió ningún correo. En este reto «enviar» solo escribe este archivo; la firma y el envío real son decisiones humanas.",
     "",
   ].join("\n")
   const destino = rutaSalida(ctx, caso, "ENVIO-SIMULADO.md")
   await writeFile(destino, contenido, "utf8")
-  return exito({ ruta: relativa(ctx, destino), listo_para_firma: paquete.listo_para_firma, resumen: `envío simulado en ${relativa(ctx, destino)}` })
+  const firmado = Boolean(paquete.firma)
+  return exito({
+    ruta: relativa(ctx, destino),
+    listo_para_firma: paquete.listo_para_firma,
+    firmado,
+    resumen: `envío simulado en ${relativa(ctx, destino)}${firmado ? " con el formulario firmado" : " sin firma"}`,
+  })
+}
+
+function describirFirma(paquete: EstadoPaquete): string {
+  const { firma } = paquete
+  if (!firma) return "sin firmar"
+  const metodo = firma.metodo === "dibujada" ? "firma dibujada" : "firma electrónica con un clic"
+  return `${firma.firmante} (${firma.cargo}), ${metodo}, el ${firma.fecha}; código de verificación ${firma.codigo}`
 }
 
 // ─── Herramientas (contrato de la sección 6.2 del PRD) ───────────────────────

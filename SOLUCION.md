@@ -1,6 +1,6 @@
 # Planteamiento de la solución · Reto 01 «Registro como proveedor»
 
-Versión 1.0 · 2026-09-28
+Versión 1.1 · 2026-09-28. Cambios frente a la 1.0: interfaz con el expediente del caso, que deja a la vista las cuatro funcionalidades del reto; firma del representante legal, dibujada o con un clic; y consola de consumo con los tokens y dólares de entrada y de salida de cada interacción.
 
 ## 1. El problema en una frase
 
@@ -11,13 +11,14 @@ Registrar a Periferia como proveedor ante cada cliente exige transcribir a mano,
 ```
  Navegador (web/)                        Backend en Bun (src/)
 ┌──────────────────┐   POST /api/chat    ┌────────────────────────────────────┐
-│ chat             │ ──────────────────▶ │ server.ts    API, clave, front     │
-│ · historial      │                     │ ciclo.ts     ciclo del agente      │
-│ · herramientas   │ ◀────────────────── │ prompt       agent/prompt.md       │
-│ · confirmación   │  reply · toolCalls  │              + src/knowledge/      │
-└──────────────────┘  needsConfirmation  │ openrouter   adaptador del modelo ─┼──▶ OpenRouter · Claude Sonnet 5.5
-                                         │ herramientas validación zod        │
-                                         └─────────────────┬──────────────────┘
+│ chat             │ ──────────────────▶ │ http/app.ts  rutas y clave         │
+│ · pasos          │                     │ ciclo.ts     ciclo del agente      │
+│ · confirmación   │ ◀────────────────── │ prompt       agent/prompt.md       │
+│ expediente       │  reply · toolCalls  │              + src/knowledge/      │
+│ · 6 pasos        │  needsConfirmation  │ openrouter   adaptador del modelo ─┼──▶ OpenRouter · Claude Sonnet 5.5
+│ · firma          │  consumo            │ herramientas validación zod        │
+│ consola          │ ── firma (persona) ▶│ firma        solo desde la interfaz│
+└──────────────────┘                     └─────────────────┬──────────────────┘
                                                            ▼
                                          src/tools/proveedor.ts: lee fixtures/ y escribe out/
  demo.ts ── llama las mismas herramientas, sin modelo ──▶ src/tools/proveedor.ts
@@ -32,6 +33,8 @@ La separación que pide el PRD está en tres lugares distintos, y ninguno vive d
 | Ejecución | `src/tools/proveedor.ts` | Las cinco herramientas con argumentos zod; son la única fuente de valores |
 
 Cambiar una regla de negocio toca las herramientas o el conocimiento, no `server.ts` ni el ciclo. El adaptador del modelo es una interfaz propia (`enviar(mensajes, herramientas) → respuesta`): pasar a otro proveedor es escribir otra implementación de `AdaptadorLLM`, sin tocar el ciclo.
+
+La interfaz arma el expediente de cada caso con los datos que devuelven las herramientas, así que las cuatro funcionalidades del reto quedan a la vista, cada una con su resultado: la solicitud leída, el cruce campo por campo con el maestro (valor y origen), el formulario con vista previa y el paquete con sus soportes y archivos. La firma no pasa por el agente: es una ruta aparte (`POST /api/casos/:caso/firma`) que solo dispara la persona.
 
 ## 3. Ciclo del agente
 
@@ -48,6 +51,8 @@ Cada mensaje del usuario abre un turno. El backend manda la conversación al mod
 Si el modelo intenta enviar sin confirmación, aunque mande `confirmado: true`, la herramienta recibe `false` y responde «requiere confirmación explícita». Las pruebas de `tests/ciclo.test.ts` cubren estos casos con un modelo de guion.
 
 **Errores.** Las herramientas nunca lanzan: devuelven `{ ok: false, error }` con un mensaje claro, y el modelo sigue con lo que sí puede hacer. Un error del proveedor (espera agotada, clave rechazada, sin crédito, límite de solicitudes) se muestra en el chat en lenguaje claro y la sesión sigue viva.
+
+**Consumo.** En cada respuesta, OpenRouter informa los tokens de entrada (y cuántos salieron de la caché), los de salida (y cuántos fueron de razonamiento), el modelo y el proveedor que respondieron, y lo que costó la entrada y la salida por separado (`upstream_inference_prompt_cost` y `upstream_inference_completions_cost`). El ciclo suma las llamadas de cada turno y la API lo devuelve en `consumo`; la consola de la interfaz lo muestra por interacción y en total. No hay estimaciones: son las cifras que cobra el proveedor.
 
 ## 4. Elección del modelo
 
@@ -96,6 +101,8 @@ Procesar un caso cuesta unos USD 0,04 y tarda unos 12 segundos, con cuatro herra
 | Fecha de referencia como argumento opcional: el chat usa la fecha de hoy en Bogotá y `demo.ts` usa fija 2026-09-03 | Usar siempre la fecha del sistema | La Cámara de Comercio del repositorio vence el 2026-09-30: con la fecha del sistema, la demo cambiaría de resultado según el día. La fecha fija es la de los PRD del reto |
 | Un solo archivo de herramientas autocontenido | Partirlo en varios módulos | El módulo reutilizable copia ese archivo tal cual; con varios archivos habría que copiar una carpeta y la plataforma podría registrar los auxiliares como herramientas |
 | Front en HTML, CSS y JavaScript sin dependencias | React u otro marco | Un solo comando levanta todo, no hay paso de compilación y hay menos piezas que explicar. El Markdown del chat se escapa antes de pintarse |
+| La firma es una ruta que solo dispara la persona desde el expediente, no una herramienta | Darle al agente una herramienta para firmar | El PRD dice que el agente nunca firma: así es imposible por diseño. El agente se entera por un evento de la interfaz y el envío informa si el formulario iba firmado |
+| Firma electrónica simple: hoja de firma con el firmante del maestro, la fecha y el SHA-256 del formulario sin firmar | Firma digital con certificado | Una firma digital exige un certificado de una entidad de certificación; el PRD deja la firma electrónica para una fase posterior. La hoja de firma permite verificar que el formulario no cambió |
 
 ## 7. Supuestos
 
@@ -107,6 +114,8 @@ Procesar un caso cuesta unos USD 0,04 y tarda unos 12 segundos, con cuatro herra
 - El Excel se genera como un libro nuevo con las hojas y celdas de la plantilla del cliente, porque el reto entrega el mapa de celdas y no el archivo original. El PDF es generado, no un AcroForm rellenado, como permite HU-3.
 - «Correo electrónico» es el del contacto comercial, como dice el glosario.
 - Las sesiones viven en memoria: si el servidor se reinicia, se pierden.
+- Quien firma en pantalla actúa como el representante legal; el nombre y el cargo del firmante salen del maestro. Solo se firma un paquete listo para firma, y volver a armarlo borra la firma.
+- Se puede enviar un paquete sin firmar, como en el ejemplo del PRD; el envío simulado deja constancia de si el formulario iba firmado.
 
 ## 8. Cobertura
 
@@ -118,8 +127,11 @@ Procesar un caso cuesta unos USD 0,04 y tarda unos 12 segundos, con cuatro herra
 | HU-4 Armar el paquete para firma | Hecho | Formulario, soportes, `checklist.md` y `borrador-correo.md` sin datos bancarios; vencidos y ausentes bloquean; envío simulado solo con confirmación |
 | HU-5 Manejo de errores | Hecho | Herramientas que nunca lanzan, mensajes claros y un caso malo no detiene los demás |
 | Bonus: módulo reutilizable | Hecho | `modulo/` generado desde las mismas fuentes y verificado por una prueba y por la integración continua |
+| Interfaz: expediente del caso | Hecho | Las cuatro funcionalidades a la vista con su resultado, vista previa del Excel y del PDF y descarga de cada archivo |
+| Firma del representante legal | Hecho | Dibujada o con un clic; hoja de firma en el PDF o en el Excel y `formulario-firmado.*` en el paquete |
+| Consola de consumo | Hecho | Modelo y proveedor que respondieron y, por interacción, tokens y dólares de entrada y de salida |
 
-**Qué falta para producción:** leer las solicitudes del buzón real en vez de fixtures; conectar el repositorio maestro y los soportes a su fuente real, con un dueño del dato; llenar la plantilla original del cliente (el .xlsx que manda) y los PDF con AcroForm; guardar sesiones y registros en una base de datos con auditoría; autenticar a cada usuario; administrar el glosario desde una pantalla; avisar antes de que venzan los soportes; y seguir el costo por caso con el volumen real.
+**Qué falta para producción:** leer las solicitudes del buzón real en vez de fixtures; conectar el repositorio maestro y los soportes a su fuente real, con un dueño del dato; llenar la plantilla original del cliente (el .xlsx que manda) y los PDF con AcroForm; guardar sesiones y registros en una base de datos con auditoría; autenticar a cada usuario; firmar con un certificado digital en vez de la firma electrónica simple; administrar el glosario desde una pantalla; avisar antes de que venzan los soportes; y seguir el costo por caso con el volumen real.
 
 ## 9. Uso de IA
 
@@ -130,6 +142,8 @@ Lo que descarté de lo que me propuso:
 - Usar Claude Opus 5.5 directo con Anthropic: preferí OpenRouter, donde ya tengo cuenta, con Claude Sonnet 5.5, que cuesta la mitad y alcanza para un trabajo que resuelven las herramientas.
 - Publicar el link con un túnel desde mi equipo: preferí Render para que el link no dependa de que mi computador esté prendido.
 - Vercel: no encaja con un backend que escribe archivos en `out/` y guarda la sesión en memoria.
+
+Después pedí una interfaz más amigable en la que se vieran las cuatro funcionalidades, la firma dibujada o con un clic y una consola con el consumo de cada interacción. Claude Code las diseñó, las implementó y las probó en el navegador conmigo.
 
 ## 10. Riesgos de llevar esto a producción
 
@@ -142,3 +156,4 @@ Lo que descarté de lo que me propuso:
 | Costo sin control | Topes de vueltas por turno, de tokens por sesión y por respuesta, caché de prompt, clave de acceso al link y límite de crédito en la clave de OpenRouter |
 | Caída o cambio del proveedor del modelo | El adaptador permite cambiar de proveedor o de modelo sin tocar el ciclo; los errores se explican en el chat |
 | Portales que cambian de diseño | La persona mantiene el control del portal y el llenado deja marcado lo que no pudo emparejar |
+| La firma electrónica simple no equivale a una firma digital certificada | En producción, firmar con un proveedor de firma digital; mientras tanto, la hoja de firma guarda el hash para verificar que el formulario no cambió |

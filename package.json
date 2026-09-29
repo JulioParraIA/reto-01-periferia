@@ -1,6 +1,6 @@
 {
   "name": "reto-01-periferia",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Agente conversacional para el registro de Periferia IT Group como proveedor ante clientes",
   "private": true,
   "type": "module",

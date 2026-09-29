@@ -2,6 +2,12 @@
 
 Agente conversacional que prepara el registro de Periferia IT Group como proveedor ante un cliente: lee la solicitud, llena el formulario (Excel o PDF) con el repositorio maestro, arma el paquete para la firma del representante legal y solo simula el envío tras una confirmación explícita.
 
+La interfaz tiene tres partes:
+
+- **Chat con el agente**, con cada paso que da (herramienta, argumentos y resultado) y la confirmación del envío resaltada.
+- **Expediente del caso**, que muestra las cuatro funcionalidades del reto con su resultado: lectura de la solicitud, cruce con el repositorio maestro (cada campo con su valor y su origen), llenado del formulario (con vista previa del Excel o del PDF) y paquete para firma (soportes, checklist y borrador). Desde ahí se firma, dibujando la firma o con un clic, y se pide el envío.
+- **Consola de consumo**, en fondo negro, con el modelo que respondió y, por cada interacción, los tokens y los dólares de entrada y de salida.
+
 - **Link de prueba:** https://reto-01-periferia.onrender.com
 - **Clave de acceso al link:** `periferia-4127hcghm1` (el chat la pide al entrar).
 - **Planteamiento de la solución:** [SOLUCION.md](SOLUCION.md).
@@ -42,11 +48,19 @@ Procesa los cuatro casos de `fixtures/reto-01/casos/` llamando directamente a la
 
 | Método | Ruta | Cuerpo y respuesta |
 |---|---|---|
-| `POST` | `/api/chat` | `{ sessionId, message, confirmar? }` → `{ reply, toolCalls[], needsConfirmation }` |
+| `POST` | `/api/chat` | `{ sessionId, message, confirmar? }` → `{ reply, toolCalls[], needsConfirmation, consumo }` |
 | `GET` | `/api/sessions/:id` | Historial completo de la sesión |
 | `GET` | `/api/health` | `{ ok: true, provider, model, acceso }`, sin claves |
+| `GET` | `/api/casos` | Casos de `fixtures/` para la pantalla de inicio |
+| `GET` | `/api/casos/:caso/archivos` | Archivos que generaron las herramientas en `out/<caso>/` |
+| `GET` | `/api/archivo?ruta=out/…` | Un archivo de `out/` (nunca de otra carpeta) |
+| `GET` | `/api/excel?ruta=out/….xlsx` | El Excel generado como tabla, para la vista previa |
+| `GET` | `/api/casos/:caso/firma` | Si se puede firmar, quién firma y la firma hecha |
+| `POST` | `/api/casos/:caso/firma` | `{ metodo: "dibujada" \| "clic", imagen?, sessionId? }` → firma el formulario del paquete |
 
-Si `CLAVE_ACCESO` está definida, `/api/chat` y `/api/sessions/:id` exigen la cabecera `x-clave-acceso`. `confirmar: true` es lo que envía el botón «Confirmar» del chat.
+Si `CLAVE_ACCESO` está definida, todas las rutas de `/api/` menos `/api/health` exigen la cabecera `x-clave-acceso`. `confirmar: true` es lo que envía el botón «Confirmar envío» del chat. `consumo` trae, por turno, el modelo y el proveedor que respondieron, las llamadas, la duración y los tokens y dólares de entrada y de salida que informa OpenRouter.
+
+La firma no es una herramienta del agente: solo la dispara la persona desde el expediente. Agrega al formulario una hoja de firma (página nueva en el PDF, hoja «Firma» en el Excel) con el firmante del maestro, la fecha y un código de verificación, y deja `formulario-firmado.*` en el paquete. Es una firma electrónica simple para el reto, no una firma digital con certificado.
 
 ## Comandos
 
@@ -55,7 +69,7 @@ Si `CLAVE_ACCESO` está definida, `/api/chat` y `/api/sessions/:id` exigen la ca
 | `bun run dev` | Levanta front y backend con recarga automática |
 | `bun run start` | Levanta front y backend |
 | `bun run demo.ts` | Verificación sin modelo |
-| `bun test` | Pruebas de herramientas, ciclo del agente y módulo |
+| `bun test` | Pruebas de herramientas, ciclo del agente, rutas HTTP, firma y módulo |
 | `bun run typecheck` | Revisión de tipos (TypeScript estricto, sin `any`) |
 | `bun run modulo` | Regenera `modulo/` desde las fuentes de la aplicación |
 | `bun run modulo --verificar` | Falla si `modulo/` no coincide con las fuentes |
@@ -69,8 +83,11 @@ src/tools/proveedor.ts               ejecución: las cinco herramientas (zod)
 src/agente/                          ciclo del agente, confirmación, sesiones y registro de herramientas
 src/llm/adapter.ts                   interfaz propia con el proveedor del modelo
 src/llm/openrouter.ts                implementación para OpenRouter
-src/server.ts                        API HTTP y servidor del front
-web/                                 front del chat (HTML, CSS y JavaScript sin dependencias)
+src/http/app.ts                      rutas HTTP (API del chat y de la interfaz)
+src/firma/firmar.ts                  firma del representante legal (solo la dispara la persona)
+src/casos.ts, src/archivos.ts        lista de casos y archivos generados, sin salir de out/
+src/server.ts                        arranque del servidor
+web/                                 front sin dependencias: chat, expediente, firma, visor y consola
 modulo/                              bonus: el agente empaquetado para otras plataformas
 fixtures/                            datos entregados por Periferia (solo lectura)
 demo.ts                              verificación sin modelo

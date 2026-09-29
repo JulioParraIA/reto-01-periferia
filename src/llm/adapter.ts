@@ -30,11 +30,27 @@ export type EsquemaHerramienta = {
   parametros: Record<string, unknown>
 }
 
+/** Consumo de una llamada al modelo. Los costos son en dólares y quedan en null si el proveedor no los informa. */
+export type UsoModelo = {
+  entrada: number
+  /** De los tokens de entrada, cuántos se leyeron de la caché y cuántos se escribieron en ella. */
+  entradaEnCache: number
+  entradaEscritaEnCache: number
+  salida: number
+  /** De los tokens de salida, cuántos fueron de razonamiento. */
+  salidaRazonamiento: number
+  costoEntrada: number | null
+  costoSalida: number | null
+  costo: number | null
+}
+
 export type RespuestaModelo = {
   texto: string
   llamadas: LlamadaHerramienta[]
-  /** Tokens de entrada (de ellos, cuántos salieron de la caché), de salida y costo en dólares si el proveedor lo informa. */
-  uso: { entrada: number; entradaEnCache: number; salida: number; costo: number | null }
+  uso: UsoModelo
+  /** Modelo y proveedor que respondieron de verdad (un intermediario puede enrutar a distintos proveedores). */
+  modeloUsado?: string
+  proveedorUsado?: string
   datosProveedor?: unknown
 }
 

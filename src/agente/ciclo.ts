@@ -4,11 +4,12 @@
  *   CA3 confirmación humana: la decide el backend con lo que escribió el usuario, no el modelo.
  *   CA4 cada llamada queda en el chat y en out/log.jsonl.
  *   CA5 un error se explica en el chat y la sesión sigue viva.
+ * Además suma el consumo del modelo de cada turno (tokens y dólares de entrada y de salida).
  */
 import { ErrorLLM, type AdaptadorLLM, type LlamadaHerramienta, type OpcionesEnvio, type RespuestaModelo } from "../llm/adapter.ts"
 import { esAfirmativo } from "./confirmacion.ts"
 import { ejecutarHerramienta, type Herramienta, type ResultadoHerramienta } from "./herramientas.ts"
-import type { LlamadaVisible, Pendiente, ResultadoTurno, Sesion } from "./tipos.ts"
+import type { ConsumoTurno, LlamadaVisible, Pendiente, ResultadoTurno, Sesion } from "./tipos.ts"
 
 export type DependenciasCiclo = {
   llm: AdaptadorLLM
@@ -28,6 +29,8 @@ type EstadoTurno = {
   otorgada: Pendiente | null
   /** Acción que queda esperando confirmación al terminar el turno. */
   pendiente: Pendiente | null
+  inicio: number
+  consumo: ConsumoTurno
 }
 
 function esObjeto(valor: unknown): valor is Record<string, unknown> {
@@ -67,11 +70,49 @@ function actualizarConfirmacion(turno: EstadoTurno, herramienta: Herramienta | u
   if (resultado.error === ERROR_CONFIRMACION || anunciaConfirmacion(resultado.datos)) turno.pendiente = { caso: casoDe(argumentos) }
 }
 
-async function pedirAlModelo(sesion: Sesion, deps: DependenciasCiclo, opciones?: OpcionesEnvio): Promise<RespuestaModelo> {
+// ─── Consumo ─────────────────────────────────────────────────────────────────
+
+function consumoVacio(modelo: string): ConsumoTurno {
+  return {
+    modelo,
+    proveedor: null,
+    llamadas: 0,
+    duracionMs: 0,
+    entrada: { tokens: 0, enCache: 0, escritosEnCache: 0, usd: null },
+    salida: { tokens: 0, razonamiento: 0, usd: null },
+    totalUsd: null,
+  }
+}
+
+/** Suma dólares que pueden faltar: null solo si ninguna llamada informó el valor. */
+function sumarUsd(acumulado: number | null, nuevo: number | null): number | null {
+  if (nuevo === null) return acumulado
+  return (acumulado ?? 0) + nuevo
+}
+
+function sumarConsumo(consumo: ConsumoTurno, respuesta: RespuestaModelo): void {
+  const { uso } = respuesta
+  consumo.llamadas += 1
+  consumo.modelo = respuesta.modeloUsado ?? consumo.modelo
+  consumo.proveedor = respuesta.proveedorUsado ?? consumo.proveedor
+  consumo.entrada.tokens += uso.entrada
+  consumo.entrada.enCache += uso.entradaEnCache
+  consumo.entrada.escritosEnCache += uso.entradaEscritaEnCache
+  consumo.entrada.usd = sumarUsd(consumo.entrada.usd, uso.costoEntrada)
+  consumo.salida.tokens += uso.salida
+  consumo.salida.razonamiento += uso.salidaRazonamiento
+  consumo.salida.usd = sumarUsd(consumo.salida.usd, uso.costoSalida)
+  consumo.totalUsd = sumarUsd(consumo.totalUsd, uso.costo)
+}
+
+// ─── Vueltas del turno ───────────────────────────────────────────────────────
+
+async function pedirAlModelo(sesion: Sesion, turno: EstadoTurno, deps: DependenciasCiclo, opciones?: OpcionesEnvio): Promise<RespuestaModelo> {
   const respuesta = await deps.llm.enviar(sesion.mensajes, deps.herramientas, opciones)
   sesion.tokens += respuesta.uso.entrada + respuesta.uso.salida
   sesion.tokensEnCache += respuesta.uso.entradaEnCache
   sesion.costo += respuesta.uso.costo ?? 0
+  sumarConsumo(turno.consumo, respuesta)
   const texto = respuesta.texto || (respuesta.llamadas.length > 0 ? "" : SIN_TEXTO)
   sesion.mensajes.push({ rol: "assistant", contenido: texto, llamadas: respuesta.llamadas, datosProveedor: respuesta.datosProveedor })
   return { ...respuesta, texto }
@@ -85,7 +126,13 @@ async function atenderLlamada(sesion: Sesion, turno: EstadoTurno, llamada: Llama
   const resultado = await ejecutarHerramienta(deps.herramientas, llamada.nombre, argumentos, ctx)
   actualizarConfirmacion(turno, herramienta, argumentos, resultado)
   sesion.mensajes.push({ rol: "tool", idLlamada: llamada.id, contenido: resultado.texto })
-  turno.llamadas.push({ herramienta: llamada.nombre, argumentos, ok: resultado.ok, resumen: resultado.resumen })
+  turno.llamadas.push({
+    herramienta: llamada.nombre,
+    argumentos,
+    ok: resultado.ok,
+    resumen: resultado.resumen,
+    ...(resultado.ok ? { datos: resultado.datos } : {}),
+  })
 }
 
 function responderSinModelo(sesion: Sesion, texto: string): string {
@@ -94,12 +141,12 @@ function responderSinModelo(sesion: Sesion, texto: string): string {
 }
 
 /** CA1: al llegar al tope, el modelo responde con lo que tiene y lo que falta, sin más herramientas. */
-async function cerrarPorTope(sesion: Sesion, deps: DependenciasCiclo): Promise<string> {
+async function cerrarPorTope(sesion: Sesion, turno: EstadoTurno, deps: DependenciasCiclo): Promise<string> {
   sesion.mensajes.push({
     rol: "user",
     contenido: `[Aviso del sistema] Se alcanzó el tope de ${deps.maxIteraciones} pasos de este turno. Sin llamar más herramientas, responde con lo que ya tienes y lo que falta por hacer.`,
   })
-  const respuesta = await pedirAlModelo(sesion, deps, { sinHerramientas: true })
+  const respuesta = await pedirAlModelo(sesion, turno, deps, { sinHerramientas: true })
   for (const llamada of respuesta.llamadas) {
     const contenido = JSON.stringify({ ok: false, error: "No se ejecutó: se alcanzó el tope de pasos del turno." })
     sesion.mensajes.push({ rol: "tool", idLlamada: llamada.id, contenido })
@@ -113,19 +160,20 @@ async function iterar(sesion: Sesion, turno: EstadoTurno, deps: DependenciasCicl
     if (sesion.tokens >= deps.maxTokensSesion) {
       return responderSinModelo(sesion, "Esta sesión llegó a su tope de tokens; abre una sesión nueva para seguir.")
     }
-    const respuesta = await pedirAlModelo(sesion, deps)
+    const respuesta = await pedirAlModelo(sesion, turno, deps)
     if (respuesta.llamadas.length === 0) return respuesta.texto
     for (const llamada of respuesta.llamadas) await atenderLlamada(sesion, turno, llamada, deps)
   }
-  return cerrarPorTope(sesion, deps)
+  return cerrarPorTope(sesion, turno, deps)
 }
 
 function cerrar(sesion: Sesion, turno: EstadoTurno, texto: string, error: boolean): ResultadoTurno {
   sesion.pendiente = turno.pendiente
   const needsConfirmation = turno.pendiente !== null
+  const consumo = { ...turno.consumo, duracionMs: Date.now() - turno.inicio }
   const marca = error ? { error: true } : {}
-  sesion.historial.push({ rol: "agente", texto, ts: new Date().toISOString(), toolCalls: turno.llamadas, needsConfirmation, ...marca })
-  return { reply: texto, toolCalls: turno.llamadas, needsConfirmation, ...marca }
+  sesion.historial.push({ rol: "agente", texto, ts: new Date().toISOString(), toolCalls: turno.llamadas, needsConfirmation, consumo, ...marca })
+  return { reply: texto, toolCalls: turno.llamadas, needsConfirmation, consumo, ...marca }
 }
 
 export async function procesarTurno(sesion: Sesion, mensaje: string, confirmar: boolean, deps: DependenciasCiclo): Promise<ResultadoTurno> {
@@ -133,6 +181,8 @@ export async function procesarTurno(sesion: Sesion, mensaje: string, confirmar: 
     llamadas: [],
     otorgada: sesion.pendiente && (confirmar || esAfirmativo(mensaje)) ? sesion.pendiente : null,
     pendiente: null,
+    inicio: Date.now(),
+    consumo: consumoVacio(deps.llm.modelo),
   }
   sesion.pendiente = null
   sesion.mensajes.push({ rol: "user", contenido: mensaje })

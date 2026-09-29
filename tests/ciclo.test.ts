@@ -21,7 +21,7 @@ import { MapeoSchema, LecturaSchema, borrar, datos, proyectoTemporal } from "./a
 
 type Paso = (mensajes: Mensaje[], opciones: OpcionesEnvio) => RespuestaModelo
 
-const USO = { entrada: 100, entradaEnCache: 0, salida: 20, costo: 0.001 }
+const USO = { entrada: 100, entradaEnCache: 40, entradaEscritaEnCache: 10, salida: 20, salidaRazonamiento: 5, costoEntrada: 0.0004, costoSalida: 0.0002, costo: 0.0006 }
 
 /** Modelo falso: responde cada vuelta con el siguiente paso del guion. */
 class ModeloDeGuion implements AdaptadorLLM {
@@ -101,6 +101,11 @@ describe("flujo con confirmación (CA3 y RN4)", () => {
     ])
     expect(primero.toolCalls.every((llamada) => llamada.ok)).toBe(true)
     expect(primero.needsConfirmation).toBe(true)
+    // Cinco llamadas al modelo (cuatro con herramientas y el resumen final), sumadas en el consumo del turno.
+    expect(primero.consumo).toMatchObject({ llamadas: 5, entrada: { tokens: 500, enCache: 200, escritosEnCache: 50 }, salida: { tokens: 100, razonamiento: 25 } })
+    expect(primero.consumo.entrada.usd).toBeCloseTo(0.002)
+    expect(primero.consumo.salida.usd).toBeCloseTo(0.001)
+    expect(primero.consumo.totalUsd).toBeCloseTo(0.003)
     expect(await existeEnvio("ec-corp-andina")).toBe(false)
 
     // El modelo manda confirmado: false por descuido: el backend lo fija en true porque el usuario confirmó.

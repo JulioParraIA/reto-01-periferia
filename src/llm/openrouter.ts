@@ -11,6 +11,7 @@ import {
   type Mensaje,
   type OpcionesEnvio,
   type RespuestaModelo,
+  type UsoModelo,
 } from "./adapter.ts"
 
 const URL_CHAT = "https://openrouter.ai/api/v1/chat/completions"
@@ -31,6 +32,8 @@ type MensajeOpenRouter =
   | { role: "tool"; tool_call_id: string; content: string }
 
 const RespuestaSchema = z.object({
+  model: z.string().nullish(),
+  provider: z.string().nullish(),
   choices: z
     .array(
       z.object({
@@ -49,10 +52,30 @@ const RespuestaSchema = z.object({
       prompt_tokens: z.number(),
       completion_tokens: z.number(),
       cost: z.number().nullish(),
-      prompt_tokens_details: z.object({ cached_tokens: z.number().nullish() }).nullish(),
+      prompt_tokens_details: z.object({ cached_tokens: z.number().nullish(), cache_write_tokens: z.number().nullish() }).nullish(),
+      completion_tokens_details: z.object({ reasoning_tokens: z.number().nullish() }).nullish(),
+      cost_details: z
+        .object({ upstream_inference_prompt_cost: z.number().nullish(), upstream_inference_completions_cost: z.number().nullish() })
+        .nullish(),
     })
     .nullish(),
 })
+
+type UsoOpenRouter = z.infer<typeof RespuestaSchema>["usage"]
+
+/** OpenRouter informa el costo total y, aparte, lo que costó la entrada y la salida. */
+function aUso(uso: UsoOpenRouter): UsoModelo {
+  return {
+    entrada: uso?.prompt_tokens ?? 0,
+    entradaEnCache: uso?.prompt_tokens_details?.cached_tokens ?? 0,
+    entradaEscritaEnCache: uso?.prompt_tokens_details?.cache_write_tokens ?? 0,
+    salida: uso?.completion_tokens ?? 0,
+    salidaRazonamiento: uso?.completion_tokens_details?.reasoning_tokens ?? 0,
+    costoEntrada: uso?.cost_details?.upstream_inference_prompt_cost ?? null,
+    costoSalida: uso?.cost_details?.upstream_inference_completions_cost ?? null,
+    costo: uso?.cost ?? null,
+  }
+}
 const ErrorSchema = z.object({ error: z.object({ message: z.string() }) })
 
 const MENSAJES_POR_ESTADO: Record<number, string> = {
@@ -109,7 +132,6 @@ export class AdaptadorOpenRouter implements AdaptadorLLM {
     const datos = RespuestaSchema.safeParse(await respuesta.json().catch(() => null))
     const mensaje = datos.success ? datos.data.choices[0]?.message : undefined
     if (!datos.success || !mensaje) throw new ErrorLLM("OpenRouter devolvió una respuesta que no se pudo leer.", "respuesta")
-    const uso = datos.data.usage
     return {
       texto: mensaje.content ?? "",
       llamadas: (mensaje.tool_calls ?? []).map((llamada) => ({
@@ -117,12 +139,9 @@ export class AdaptadorOpenRouter implements AdaptadorLLM {
         nombre: llamada.function.name,
         argumentos: llamada.function.arguments || "{}",
       })),
-      uso: {
-        entrada: uso?.prompt_tokens ?? 0,
-        entradaEnCache: uso?.prompt_tokens_details?.cached_tokens ?? 0,
-        salida: uso?.completion_tokens ?? 0,
-        costo: uso?.cost ?? null,
-      },
+      uso: aUso(datos.data.usage),
+      modeloUsado: datos.data.model ?? undefined,
+      proveedorUsado: datos.data.provider ?? undefined,
       datosProveedor: mensaje.reasoning_details ?? undefined,
     }
   }

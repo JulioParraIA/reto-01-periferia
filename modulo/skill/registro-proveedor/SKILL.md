@@ -39,6 +39,10 @@ Cada soporte del repositorio tiene su fecha de vigencia (`vigencia_hasta`):
 
 El paquete queda **listo para firma** solo si el formulario está generado y no hay soportes vencidos ni ausentes. Los campos faltantes y por confirmar no bloquean, pero la analista los revisa antes de la firma.
 
+## Firma
+
+La firma es una decisión humana. Cuando el paquete está listo, la persona firma en la pantalla (sección «Firma» del expediente), dibujando la firma o con un clic. Al formulario se le agrega una hoja de firma con el firmante del maestro, la fecha y un código de verificación, y en el paquete queda `formulario-firmado.pdf` o `formulario-firmado.xlsx`, que es el que se adjunta al envío. Es una firma electrónica simple para el reto, no una firma digital con certificado. En el portal web no hay formulario que firmar. Si se vuelve a armar el paquete, la firma se pierde y hay que firmar de nuevo.
+
 ## Formatos de salida
 
 - **Excel (xlsx):** cada etiqueta y su valor van en la hoja y la celda que indica la plantilla del cliente.
@@ -48,6 +52,6 @@ El paquete queda **listo para firma** solo si el formulario está generado y no 
 ## Qué queda en out/
 
 - `out/<caso>/formulario.xlsx`, `formulario.pdf` o `valores-portal.md`.
-- `out/<caso>/paquete/`: el formulario, las copias de los soportes, `checklist.md` y `borrador-correo.md`.
+- `out/<caso>/paquete/`: el formulario, las copias de los soportes, `checklist.md`, `borrador-correo.md` y, si ya se firmó, el formulario firmado con su `firma.json`.
 - `out/<caso>/ENVIO-SIMULADO.md`: solo tras la confirmación explícita; en este reto «enviar» es escribir ese archivo.
 - `out/<caso>/log.jsonl`: el registro de cada herramienta que se usó en el caso.
